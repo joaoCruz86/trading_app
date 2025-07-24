@@ -1,17 +1,21 @@
 # core/config.py
 
-# Ideal thresholds for each metric
+# Thresholds for rule-based evaluation
 THRESHOLDS = {
-    "P/E": 25,
-    "EPS_Growth": 10,
-    "Debt/Equity": 50,
-    "Revenue_Growth": 5
+    "EPS_Growth": 10,         # % YoY
+    "Revenue_Growth": 5,      # % YoY
+    "Debt/Equity": 100,       # %
+    "P/E": 25,                # Acceptable if <= 25
+    "Market_Cap": 500,        # Minimum $500 million
+    "Avg_Volume": 500_000     # Minimum 500k daily shares
 }
 
-# Importance weight for each metric (must sum to ~100)
+# Relative importance of each metric (out of 100 total)
 METRIC_WEIGHTS = {
+    "EPS_Growth": 30,
+    "Revenue_Growth": 25,
+    "Debt/Equity": 15,
     "P/E": 15,
-    "EPS_Growth": 35,
-    "Debt/Equity": 20,
-    "Revenue_Growth": 30
+    "Market_Cap": 10,
+    "Avg_Volume": 5
 }
