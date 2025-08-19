@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import yfinance as yf
 from pymongo import UpdateOne
 from core.db import db
-from scripts.backfill_prices import compute_indicators  # reuse
+from scripts.backfill.backfill_prices import compute_indicators  # reuse
 
 TICKERS_CSV = "tickers.csv"
 

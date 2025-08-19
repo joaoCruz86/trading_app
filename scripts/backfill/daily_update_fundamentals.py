@@ -1,7 +1,7 @@
 import pandas as pd
 import yfinance as yf
 from core.db import db
-from scripts.backfill_fundamentals import build_quarter_docs  # reuse
+from scripts.backfill.backfill_fundamentals import build_quarter_docs  # reuse
 
 TICKERS_CSV = "tickers.csv"
 
