@@ -96,7 +96,12 @@ if __name__ == "__main__":
         final = final.fillna(value=pd.NA).astype(object).where(pd.notnull(final), None)
         db_exit = db["exit_training"]
         db_exit.drop()
-        db_exit.insert_many(final.to_dict("records"))
+        records = final.to_dict("records")
+        
+        for r in records:
+            r.pop("_id", None)  # Remove _id if it exists
+        db_exit.insert_many(records)
+
         print(f"✅ Inserted {len(final)} rows into MongoDB collection 'exit_training'.")
     else:
         print("❌ No exit datasets were built.")

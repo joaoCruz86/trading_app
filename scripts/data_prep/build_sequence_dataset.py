@@ -1,89 +1,104 @@
-# scripts/data_prep/build_sequence_dataset.py
 """
-Build Sequence Dataset for Time-Aware Models
---------------------------------------------
-This script transforms your tabular daily data into rolling windows
-so that GRU/LSTM/Transformers can learn temporal patterns.
+Build a training dataset to detect weakening signals (exit points) based on technical indicators.
+This script pulls historical stock price data, applies technical indicators, and labels data points
+where the price drops by a specified percentage over a short horizon.
 
-Each sample = last N days of features for a stock.
-Label = forward return (e.g. price change over next horizon days).
-
-Output: sequence_dataset.npz
-- X_entry, y_entry  → for entry model
-- X_exit, y_exit    → for exit model
+The labels (1 = exit signal, 0 = hold) will be used to train the Exit Signal Model.
 """
 
 import os
-import numpy as np
 import pandas as pd
 from core.db import db
+from core.technical_analysis import compute_technical_indicators
+from core.macro_filter import is_macro_environment_favorable, get_macro_for_country
 
-# --- Config ---
-WINDOW_LEN = 60   # number of past days used as input
-HORIZON = 5       # predict next 5 days return
-FEATURE_COLS = None  # if None, will auto-select numeric features
-OUTPUT_PATH = "data/sequence_dataset.npz"
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
-
-def build_sequences(df: pd.DataFrame, ticker_col="ticker", date_col="date", target_col="target"):
+def build_exit_dataset(ticker: str, horizon: int = 5, drop_threshold: float = -0.02):
     """
-    Convert daily tabular data into rolling windows for sequence models.
+    Build exit signal dataset for a single ticker.
+      horizon: number of days to look ahead for drop
+      drop_threshold: % drop to label an exit signal (e.g., -2%)
     """
-    X, y = [], []
+    cursor = db["prices"].find({"ticker": ticker}).sort("date", 1)
+    prices = pd.DataFrame(list(cursor))
 
-    # ensure sorting
-    df[date_col] = pd.to_datetime(df[date_col])
-    df = df.sort_values([ticker_col, date_col])
+    if prices.empty:
+        raise ValueError(f"No price data found for {ticker}")
 
-    tickers = df[ticker_col].unique()
+    # Normalize and clean columns
+    prices.rename(columns={col: col.capitalize() for col in prices.columns}, inplace=True)
+    prices.drop(columns=["_id"], errors="ignore", inplace=True)
+    prices["date"] = pd.to_datetime(prices["Date"])
+    prices.set_index("date", inplace=True)
+    prices.drop(columns=["Date", "Indicators"], errors="ignore", inplace=True)
+    prices.sort_index(inplace=True)
 
-    for ticker in tickers:
-        df_t = df[df[ticker_col] == ticker].copy()
+    # Apply indicators
+    prices = prices.asfreq("D").ffill()
+    prices = compute_technical_indicators(prices)
 
-        # auto-select features if not set
-        features = df_t.drop(columns=[ticker_col, date_col, target_col], errors="ignore")
-        if FEATURE_COLS:
-            features = features[FEATURE_COLS]
+    # Merge fundamentals (optional)
+    fundamentals = pd.DataFrame(list(db["fundamentals"].find({"ticker": ticker})))
+    if not fundamentals.empty and "period" in fundamentals.columns:
+        fundamentals["period"] = pd.to_datetime(fundamentals["period"], errors="coerce")
+        fundamentals.dropna(subset=["period"], inplace=True)
+        fundamentals.set_index("period", inplace=True)
+        fundamentals = fundamentals[~fundamentals.index.duplicated(keep="last")].sort_index()
+        fundamentals = fundamentals.asfreq("D").ffill()
+        prices = prices.join(fundamentals, how="left").sort_index()
 
-        values = features.to_numpy()
-        targets = df_t[target_col].to_numpy()
+    # Add macro environment
+    macro = get_macro_for_country("USA")
+    prices["Macro_OK"] = is_macro_environment_favorable(macro)
 
-        for i in range(len(df_t) - WINDOW_LEN - HORIZON):
-            X.append(values[i:i+WINDOW_LEN])   # last N days
-            # label: did the stock go up after horizon days?
-            future_return = targets[i+WINDOW_LEN+HORIZON-1]
-            y.append(future_return)
+    # Create exit label
+    prices["future_close"] = prices["Close"].shift(-horizon)
+    prices["future_return"] = (prices["future_close"] - prices["Close"]) / prices["Close"]
+    prices["exit_target"] = (prices["future_return"] <= drop_threshold).astype(int)
 
-    return np.array(X), np.array(y)
+    # Drop unused
+    prices.drop(columns=[
+        "fundamentals", "financials", "ratios", "balanceSheet",
+        "cashflow", "earnings", "source"
+    ], errors="ignore", inplace=True)
 
+    # Keep the date as column before reset
+    prices["date"] = prices.index
 
-def main():
-    print("⚡ Building sequence dataset...")
+    # Clean rows
+    columns_to_check = ["future_close", "future_return", "exit_target"]
+    dataset = prices.dropna(subset=columns_to_check).reset_index(drop=True)
+    dataset["ticker"] = ticker
 
-    # Load from DB
-    df = pd.DataFrame(list(db["training"].find()))
-    if "_id" in df.columns:
-        df.drop(columns=["_id"], inplace=True)
-
-    # Ensure target is binary
-    assert set(df["target"].unique()).issubset({0, 1}), "Target must be binary!"
-
-    # Build sequences
-    X, y = build_sequences(df)
-
-    # For simplicity, use same labels for entry & exit now
-    X_entry, y_entry = X, y
-    X_exit, y_exit = X, y
-
-    # Save dataset
-    os.makedirs("data", exist_ok=True)
-    np.savez_compressed(OUTPUT_PATH, 
-                        X_entry=X_entry, y_entry=y_entry,
-                        X_exit=X_exit, y_exit=y_exit)
-
-    print(f"✅ Sequence dataset saved to {OUTPUT_PATH}")
-    print(f"   Shapes → X: {X.shape}, y: {y.shape}")
-
+    print(f"📉 Built exit dataset for {ticker} — rows: {len(dataset)}")
+    return dataset
 
 if __name__ == "__main__":
-    main()
+    tickers = db["prices"].distinct("ticker")
+    print(f"🔍 Found tickers: {tickers}")
+    all_data = []
+
+    for ticker in tickers:
+        try:
+            ds = build_exit_dataset(ticker)
+            if not ds.empty:
+                all_data.append(ds)
+        except Exception as e:
+            print(f"⚠️ Skipped {ticker}: {e}")
+
+    if all_data:
+        final = pd.concat(all_data, ignore_index=True)
+        out_path = os.path.join(DATA_DIR, "exit_training_dataset.csv")
+        final.to_csv(out_path, index=False)
+        print(f"✅ Saved exit training dataset to {out_path}")
+
+        # Save to MongoDB
+        final = final.fillna(value=pd.NA).astype(object).where(pd.notnull(final), None)
+        db_exit = db["exit_training"]
+        db_exit.drop()
+        db_exit.insert_many(final.to_dict("records"))
+        print(f"✅ Inserted {len(final)} rows into MongoDB collection 'exit_training'.")
+    else:
+        print("❌ No exit datasets were built.")

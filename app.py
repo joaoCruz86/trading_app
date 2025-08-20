@@ -9,8 +9,9 @@ from core.technical_analysis import get_technical_summary, fetch_price_data, com
 from core.data_loader import load_tickers_from_csv
 from core.evaluator import evaluate_multiple
 from core.macro_filter import get_macro_for_country, load_macro_data
-from ai.predict_tabular import predict_tabular_signals  # assumes this exists
-from ai.predict_sequence import predict_sequence_signals  # assumes this exists
+from scripts.prediction.tabular_signal_service import run_signal_service
+from scripts.prediction.sequence_predict import run_sequence_prediction
+
 
 # --- Cache wrappers for expensive ops ---
 @st.cache_data(show_spinner=True)
@@ -91,7 +92,7 @@ with tab_layer2:
     else:
         st.info("Please upload or select tickers.")
 
-# --- Technical Analysis Tab ---
+# --- Technical Analysis Tgit piusab ---
 with tab_tech:
     st.subheader("📉 Technical Analysis & Charts")
     if tickers:

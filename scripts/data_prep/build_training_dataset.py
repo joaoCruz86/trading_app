@@ -89,7 +89,7 @@ def build_dataset(ticker: str, horizon: int = 20, target_return: float = 0.05):
     # --- 7. Final clean ---
     print("📉 Nulls before dropna():")
     print(prices.isna().sum().sort_values(ascending=False).head(10))
-    dataset = prices.dropna(subset=["future_close", "future_return", "target"]).reset_index(drop=True)
+    dataset = prices.dropna(subset=["future_close", "future_return", "target"]).reset_index()  # ✅ keeps 'date'
     dataset["ticker"] = ticker
 
     print(f"📊 Built dataset shape for {ticker}: {dataset.shape}")
