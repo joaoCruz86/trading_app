@@ -13,7 +13,7 @@ import pytest
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # hide TF INFO/WARN
 warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf")
 
-from scripts.model_training import train_sequence_model as seq
+from scripts.model_training.sequence import sequence_model_utils as seq
 
 
 @pytest.fixture(autouse=True)

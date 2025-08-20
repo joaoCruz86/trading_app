@@ -94,3 +94,14 @@ if __name__ == "__main__":
     print("\n📊 Classification Report:\n", report)
     print("✅ Metrics:", metrics)
     print("✅ Confusion Matrix:\n", cm)
+
+
+def load_lightgbm(model_path: str = "models/trading_model.pkl"):
+    """
+    Load the saved LightGBM model from disk.
+    """
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"❌ LightGBM model not found at {model_path}")
+    return joblib.load(model_path)
+
+

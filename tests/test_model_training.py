@@ -8,8 +8,8 @@ This test ensures:
 
 import os
 import unittest
-from scripts.model_training.train_random_forest import train_random_forest
-from scripts.model_training.train_lightgbm import train_lightgbm
+from scripts.model_training.tabular.train_random_forest import train_random_forest
+from scripts.model_training.tabular.train_lightgbm import train_lightgbm
 
 
 class TestModelTraining(unittest.TestCase):

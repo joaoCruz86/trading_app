@@ -1,5 +1,22 @@
 # core/technical_analysis.py
 
+"""
+core/technical_analysis.py
+
+This module provides functions to fetch historical price data and compute a range of technical indicators (e.g., RSI, MACD, EMAs, SMAs, Bollinger Bands) using yfinance and pandas-ta.
+
+Purpose:
+- Used during price data backfilling to enrich the MongoDB dataset with daily technical indicators.
+- Can be called independently to retrieve the latest technical summary for any ticker.
+
+Note:
+- This module does NOT currently feed into Layer 1 (rules_engine.py).
+- It is not used in rule-based screening or confidence scoring.
+- It may support future enhancements or Layer 2 (AI signal generation).
+
+"""
+
+
 import yfinance as yf
 import pandas_ta as ta
 
