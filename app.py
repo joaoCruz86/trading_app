@@ -9,30 +9,30 @@ from core.technical_analysis import get_technical_summary, fetch_price_data, com
 from core.data_loader import load_tickers_from_csv
 from core.evaluator import evaluate_multiple
 from core.macro_filter import get_macro_for_country, load_macro_data
+from ai.predict_tabular import predict_tabular_signals  # assumes this exists
+from ai.predict_sequence import predict_sequence_signals  # assumes this exists
 
 # --- Cache wrappers for expensive ops ---
 @st.cache_data(show_spinner=True)
 def cached_fetch_price_data(ticker, start_date, end_date):
-    stock = fetch_price_data(ticker, period=None, interval="1d", start_date=start_date, end_date=end_date)
-    return stock
+    return fetch_price_data(ticker, period=None, interval="1d", start_date=start_date, end_date=end_date)
 
 @st.cache_data(show_spinner=True)
 def cached_compute_technical_indicators(df):
     return compute_technical_indicators(df)
 
 # --- Page setup ---
-st.set_page_config(page_title="Trading Signal App", layout="centered")
-st.title("📈 AI Trading Signal Generator (Fundamentals v0.1)")
+st.set_page_config(page_title="AI Trading Signal App", layout="wide")
+st.title("📈 AI Trading Signal App (Multi-Layered)")
+st.caption("Pre-Screening + Layer 1 (Tabular) + Layer 2 (Sequence) + Technical Indicators")
 
 # --- Global Inputs ---
 macro_df = load_macro_data()
 country = st.selectbox("🌍 Select macro environment", macro_df["Country"].unique())
 macro = get_macro_for_country(country)
 
-st.subheader("📎 Upload Ticker List (CSV format)")
-uploaded_file = st.file_uploader("Upload a CSV file with one column: Ticker", type=["csv"])
-
-tickers = []
+st.subheader("📎 Upload or Select Tickers")
+uploaded_file = st.file_uploader("Upload a CSV with one column: Ticker", type=["csv"])
 
 if uploaded_file:
     tickers = load_tickers_from_csv(uploaded_file)
@@ -45,7 +45,7 @@ else:
 
 st.subheader("📅 Select Date Range for Charts")
 default_end = datetime.today()
-default_start = default_end - timedelta(days=365*3)  # 3 years default
+default_start = default_end - timedelta(days=365 * 3)
 
 start_date = st.date_input("Start Date", default_start)
 end_date = st.date_input("End Date", default_end)
@@ -55,91 +55,74 @@ if start_date > end_date:
     st.stop()
 
 # --- Tabs ---
-tab_eval, tab_tech, tab_macro = st.tabs(["Evaluation", "Technical Analysis", "Macroeconomics"])
+tab_screen, tab_layer1, tab_layer2, tab_tech, tab_macro = st.tabs([
+    "Pre-Screening (Fundamentals)",
+    "Layer 1: Tabular AI",
+    "Layer 2: Sequence AI",
+    "Technical Indicators",
+    "Macroeconomics"
+])
 
-# --- Evaluation Tab ---
-with tab_eval:
+# --- Pre-Screening Tab ---
+with tab_screen:
+    st.subheader("🔎 Rule-Based Pre-Screening")
     if tickers:
         results = evaluate_multiple(tickers, macro)
         df = pd.DataFrame(results)
-
-        st.subheader("📋 Evaluation Results")
         st.dataframe(df)
-        st.caption("Showing results for selected tickers based on current thresholds.")
     else:
-        st.info("Select or upload tickers to see evaluation results.")
+        st.info("Please upload or select tickers.")
+
+# --- Layer 1 Tabular AI ---
+with tab_layer1:
+    st.subheader("🤖 AI Layer 1: Tabular Model")
+    if tickers:
+        df_tabular = predict_tabular_signals(tickers)
+        st.dataframe(df_tabular)
+    else:
+        st.info("Please upload or select tickers.")
+
+# --- Layer 2 Sequence AI ---
+with tab_layer2:
+    st.subheader("🔁 AI Layer 2: Sequence Model")
+    if tickers:
+        df_seq = predict_sequence_signals(tickers)
+        st.dataframe(df_seq)
+    else:
+        st.info("Please upload or select tickers.")
 
 # --- Technical Analysis Tab ---
 with tab_tech:
+    st.subheader("📉 Technical Analysis & Charts")
     if tickers:
-        st.subheader("📉 Technical Analysis & Visualization")
-
         for ticker in tickers:
             tech = get_technical_summary(ticker)
-
             if "Error" in tech:
-                st.warning(f"Error fetching technical data for {ticker}: {tech['Error']}")
+                st.warning(f"{ticker}: {tech['Error']}")
                 continue
 
             st.markdown(f"### {ticker}")
             st.write(f"**Date:** {tech.get('Date', 'N/A')}")
             st.write(f"**RSI:** {tech.get('RSI')} ({tech.get('RSI_signal')})")
-            st.write(f"**MACD:** {tech.get('MACD')} (Signal: {tech.get('MACD_signal')}, Trend: {tech.get('MACD_trend')})")
-            st.write(f"**EMA 20:** {tech.get('EMA_20')}")
-            st.write(f"**EMA 50:** {tech.get('EMA_50')}")
-            st.write(f"**SMA 20:** {tech.get('SMA_20')}")
-            st.write(f"**SMA 200:** {tech.get('SMA_200')}")
-            st.write(f"**Bollinger Bands Upper:** {tech.get('BB_upper')}")
-            st.write(f"**Bollinger Bands Lower:** {tech.get('BB_lower')}")
+            st.write(f"**MACD:** {tech.get('MACD')} ({tech.get('MACD_signal')}, {tech.get('MACD_trend')})")
 
-            df_prices = cached_fetch_price_data(ticker, start_date=start_date, end_date=end_date)
-            df_indicators = cached_compute_technical_indicators(df_prices)
+            df_prices = cached_fetch_price_data(ticker, start_date, end_date)
+            df_ind = cached_compute_technical_indicators(df_prices)
 
-            # Candlestick chart with overlays
-            fig_candle = go.Figure(data=[go.Candlestick(
-                x=df_indicators.index,
-                open=df_indicators['Open'],
-                high=df_indicators['High'],
-                low=df_indicators['Low'],
-                close=df_indicators['Close'],
-                name='Candlestick'
-            )])
-
-            fig_candle.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['EMA_20'], mode='lines', name='EMA 20'))
-            fig_candle.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['EMA_50'], mode='lines', name='EMA 50'))
-            fig_candle.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['SMA_200'], mode='lines', name='SMA 200'))
-
-            fig_candle.add_trace(go.Scatter(
-                x=df_indicators.index, y=df_indicators['BB_upper'], line=dict(color='rgba(0,0,255,0.2)'),
-                name='BB Upper', fill=None))
-            fig_candle.add_trace(go.Scatter(
-                x=df_indicators.index, y=df_indicators['BB_lower'], line=dict(color='rgba(0,0,255,0.2)'),
-                name='BB Lower', fill='tonexty'))
-
-            fig_candle.update_layout(title=f"{ticker} Price Candlestick with Indicators", xaxis_title="Date", yaxis_title="Price")
-            st.plotly_chart(fig_candle, use_container_width=True)
-
-            # RSI chart
-            fig_rsi = go.Figure()
-            fig_rsi.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['RSI'], mode='lines', name='RSI'))
-            fig_rsi.add_hline(y=70, line_dash='dash', line_color='red')
-            fig_rsi.add_hline(y=30, line_dash='dash', line_color='green')
-            fig_rsi.update_layout(title=f"{ticker} RSI", xaxis_title="Date", yaxis_title="RSI")
-            st.plotly_chart(fig_rsi, use_container_width=True)
-
-            # MACD chart
-            fig_macd = go.Figure()
-            fig_macd.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['MACD'], mode='lines', name='MACD'))
-            fig_macd.add_trace(go.Scatter(x=df_indicators.index, y=df_indicators['MACD_signal'], mode='lines', name='Signal'))
-            fig_macd.update_layout(title=f"{ticker} MACD", xaxis_title="Date", yaxis_title="MACD")
-            st.plotly_chart(fig_macd, use_container_width=True)
-
+            fig = go.Figure(data=[go.Candlestick(
+                x=df_ind.index,
+                open=df_ind['Open'], high=df_ind['High'],
+                low=df_ind['Low'], close=df_ind['Close'], name='Candlestick')])
+            fig.add_trace(go.Scatter(x=df_ind.index, y=df_ind['EMA_20'], name='EMA 20'))
+            fig.add_trace(go.Scatter(x=df_ind.index, y=df_ind['SMA_200'], name='SMA 200'))
+            fig.update_layout(title=f"{ticker} Price Chart", xaxis_title="Date", yaxis_title="Price")
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Select or upload tickers to see technical analysis.")
+        st.info("Please upload or select tickers.")
 
-# --- Macroeconomics Tab ---
+# --- Macroeconomic Tab ---
 with tab_macro:
-    st.subheader("🌍 Macroeconomic Data Being Applied")
+    st.subheader("🌍 Macro Filters in Use")
     st.write(f"**Country:** {country}")
     st.write(f"- GDP Growth: {macro['GDP_Growth']}%")
     st.write(f"- Inflation: {macro['Inflation']}%")

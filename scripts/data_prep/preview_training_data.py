@@ -1,3 +1,12 @@
+"""
+Utility script to preview the first few rows of the training dataset stored in MongoDB.
+
+- Connects to the 'training' collection.
+- Loads and displays up to 10 sample records.
+- Cleans up MongoDB-specific fields (e.g., _id) for readability.
+- Used for inspection and debugging before model training.
+"""
+
 import pandas as pd
 from core.db import db
 

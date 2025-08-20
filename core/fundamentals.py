@@ -1,5 +1,27 @@
 # core/fundamentals.py
 
+"""
+core/fundamentals.py
+
+This module fetches company-level fundamental data using the Yahoo Finance API (via yfinance).
+
+Purpose:
+- Provides essential financial metrics (growth, valuation, liquidity, profitability) for a given stock ticker.
+- Powers the fundamental screening logic in Layer 1 (rules_engine.py).
+
+Metrics Retrieved:
+- EPS Growth, Revenue Growth, Debt/Equity, P/E Ratio, Market Cap, Avg Volume
+- Plus additional metrics: PEG, P/B, ROE, Dividend Yield, Beta, Current/Quick Ratios, Profit Margin
+
+Notes:
+- Values are cleaned and normalized for consistency.
+- Some values are scaled (e.g. % or millions).
+- Missing or non-numeric values are safely defaulted to 0.
+
+Used directly by: `rules_engine.evaluate_stock()`
+"""
+
+
 import yfinance as yf
 
 def get_fundamentals(ticker):
