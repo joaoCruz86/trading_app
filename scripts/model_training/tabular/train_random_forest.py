@@ -19,9 +19,18 @@ def _load_training_df() -> pd.DataFrame:
 
 
 def _prep_features(X: pd.DataFrame) -> pd.DataFrame:
-    non_numeric_cols = X.select_dtypes(include=["object"]).columns
+    # 🧠 Optional: Extract time-based features if 'date' column exists
+    if "date" in X.columns and pd.api.types.is_datetime64_any_dtype(X["date"]):
+        X["day_of_week"] = X["date"].dt.dayofweek
+        X["month"] = X["date"].dt.month
+        X["day"] = X["date"].dt.day
+        X = X.drop(columns=["date"])
+
+    # 🧹 Drop non-numeric and datetime columns
+    non_numeric_cols = X.select_dtypes(include=["object", "datetime64"]).columns
     print("🧹 Dropping non-numeric columns:", list(non_numeric_cols))
     X = X.drop(columns=non_numeric_cols, errors="ignore")
+
     return X.ffill().bfill().fillna(0)
 
 

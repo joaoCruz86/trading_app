@@ -1,10 +1,12 @@
-
 """
 Build a training dataset to detect weakening signals (exit points) based on technical indicators.
 This script pulls historical stock price data, applies technical indicators, and labels data points
 where the price drops by a specified percentage over a short horizon.
 
 The labels (1 = exit signal, 0 = hold) will be used to train the Exit Signal Model.
+It generates:
+- A CSV file for tabular models (without 'date')
+- A MongoDB collection for sequence models (with 'date')
 """
 
 import os
@@ -65,6 +67,9 @@ def build_exit_dataset(ticker: str, horizon: int = 5, drop_threshold: float = -0
         "cashflow", "earnings", "source"
     ], errors="ignore", inplace=True)
 
+    # Keep 'date' column for sequence models
+    prices["date"] = prices.index
+
     # Clean rows
     columns_to_check = ["future_close", "future_return", "exit_target"]
     dataset = prices.dropna(subset=columns_to_check).reset_index(drop=True)
@@ -72,6 +77,7 @@ def build_exit_dataset(ticker: str, horizon: int = 5, drop_threshold: float = -0
 
     print(f"📉 Built exit dataset for {ticker} — rows: {len(dataset)}")
     return dataset
+
 
 if __name__ == "__main__":
     tickers = db["prices"].distinct("ticker")
@@ -88,20 +94,23 @@ if __name__ == "__main__":
 
     if all_data:
         final = pd.concat(all_data, ignore_index=True)
-        out_path = os.path.join(DATA_DIR, "exit_training_dataset.csv")
-        final.to_csv(out_path, index=False)
-        print(f"✅ Saved exit training dataset to {out_path}")
 
-        # Save to MongoDB
-        final = final.fillna(value=pd.NA).astype(object).where(pd.notnull(final), None)
+        # Save CSV for tabular models — drop 'date'
+        out_path = os.path.join(DATA_DIR, "exit_training_dataset.csv")
+        final_tabular = final.drop(columns=["date"], errors="ignore")
+        final_tabular.to_csv(out_path, index=False)
+        print(f"✅ Saved tabular-compatible exit dataset to {out_path}")
+
+        # Save to MongoDB for sequence models — keep 'date'
+        final_mongo = final.fillna(value=pd.NA).astype(object).where(pd.notnull(final), None)
+        records = final_mongo.to_dict("records")
+        for record in records:
+            record.pop("_id", None)
+
         db_exit = db["exit_training"]
-        db_exit.drop()
-        records = final.to_dict("records")
-        
-        for r in records:
-            r.pop("_id", None)  # Remove _id if it exists
+        db_exit.drop()  # Clear old data
         db_exit.insert_many(records)
 
-        print(f"✅ Inserted {len(final)} rows into MongoDB collection 'exit_training'.")
+        print(f"✅ Inserted {len(final_mongo)} rows into MongoDB collection 'exit_training'")
     else:
         print("❌ No exit datasets were built.")
