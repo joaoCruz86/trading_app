@@ -1,5 +1,3 @@
-# app.py
-
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -9,9 +7,7 @@ from core.technical_analysis import get_technical_summary, fetch_price_data, com
 from core.data_loader import load_tickers_from_csv
 from core.evaluator import evaluate_multiple
 from core.macro_filter import get_macro_for_country, load_macro_data
-from scripts.prediction.tabular_signal_service import run_signal_service
 from scripts.prediction.sequence_predict import run_sequence_prediction
-
 
 # --- Cache wrappers for expensive ops ---
 @st.cache_data(show_spinner=True)
@@ -24,8 +20,8 @@ def cached_compute_technical_indicators(df):
 
 # --- Page setup ---
 st.set_page_config(page_title="AI Trading Signal App", layout="wide")
-st.title("📈 AI Trading Signal App (Multi-Layered)")
-st.caption("Pre-Screening + Layer 1 (Tabular) + Layer 2 (Sequence) + Technical Indicators")
+st.title("📈 AI Trading Signal App (Sequence Model Only)")
+st.caption("Pre-Screening + Sequence Model + Technical Indicators")
 
 # --- Global Inputs ---
 macro_df = load_macro_data()
@@ -56,10 +52,9 @@ if start_date > end_date:
     st.stop()
 
 # --- Tabs ---
-tab_screen, tab_layer1, tab_layer2, tab_tech, tab_macro = st.tabs([
+tab_screen, tab_sequence, tab_tech, tab_macro = st.tabs([
     "Pre-Screening (Fundamentals)",
-    "Layer 1: Tabular AI",
-    "Layer 2: Sequence AI",
+    "Sequence AI",
     "Technical Indicators",
     "Macroeconomics"
 ])
@@ -74,25 +69,16 @@ with tab_screen:
     else:
         st.info("Please upload or select tickers.")
 
-# --- Layer 1 Tabular AI ---
-with tab_layer1:
-    st.subheader("🤖 AI Layer 1: Tabular Model")
+# --- Sequence AI Tab ---
+with tab_sequence:
+    st.subheader("🔁 AI: Sequence Model")
     if tickers:
-        df_tabular = predict_tabular_signals(tickers)
-        st.dataframe(df_tabular)
-    else:
-        st.info("Please upload or select tickers.")
-
-# --- Layer 2 Sequence AI ---
-with tab_layer2:
-    st.subheader("🔁 AI Layer 2: Sequence Model")
-    if tickers:
-        df_seq = predict_sequence_signals(tickers)
+        df_seq = run_sequence_prediction()
         st.dataframe(df_seq)
     else:
         st.info("Please upload or select tickers.")
 
-# --- Technical Analysis Tgit piusab ---
+# --- Technical Analysis Tab ---
 with tab_tech:
     st.subheader("📉 Technical Analysis & Charts")
     if tickers:

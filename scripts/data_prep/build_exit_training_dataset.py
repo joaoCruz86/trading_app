@@ -5,7 +5,6 @@ where the price drops by a specified percentage over a short horizon.
 
 The labels (1 = exit signal, 0 = hold) will be used to train the Exit Signal Model.
 It generates:
-- A CSV file for tabular models (without 'date')
 - A MongoDB collection for sequence models (with 'date')
 """
 
@@ -14,9 +13,6 @@ import pandas as pd
 from core.db import db
 from core.technical_analysis import compute_technical_indicators
 from core.macro_filter import is_macro_environment_favorable, get_macro_for_country
-
-DATA_DIR = "data"
-os.makedirs(DATA_DIR, exist_ok=True)
 
 def build_exit_dataset(ticker: str, horizon: int = 5, drop_threshold: float = -0.02):
     """
@@ -94,12 +90,6 @@ if __name__ == "__main__":
 
     if all_data:
         final = pd.concat(all_data, ignore_index=True)
-
-        # Save CSV for tabular models — drop 'date'
-        out_path = os.path.join(DATA_DIR, "exit_training_dataset.csv")
-        final_tabular = final.drop(columns=["date"], errors="ignore")
-        final_tabular.to_csv(out_path, index=False)
-        print(f"✅ Saved tabular-compatible exit dataset to {out_path}")
 
         # Save to MongoDB for sequence models — keep 'date'
         final_mongo = final.fillna(value=pd.NA).astype(object).where(pd.notnull(final), None)

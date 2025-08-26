@@ -25,9 +25,11 @@ def run_sequence_prediction():
         print(f"❌ Dataset not found at {DATASET_PATH}")
         return
 
-    data = np.load(DATASET_PATH)
-    X = data["X"]
-    tickers = data["tickers"]
+    data = np.load(DATASET_PATH, allow_pickle=True)
+    X_entry = data["X_entry"].astype("float32")
+    X_exit = data["X_exit"].astype("float32")
+    tickers_entry = [str(t) for t in data["tickers_entry"]]
+    tickers_exit = [str(t) for t in data["tickers_exit"]]
 
     # --- Load models ---
     if not os.path.exists(ENTRY_MODEL_PATH) or not os.path.exists(EXIT_MODEL_PATH):
@@ -38,16 +40,15 @@ def run_sequence_prediction():
     exit_model = load_model(EXIT_MODEL_PATH)
 
     # --- Predict ---
-    entry_preds = entry_model.predict(X)
-    exit_preds = exit_model.predict(X)
+    entry_preds = entry_model.predict(X_entry)
+    exit_preds = exit_model.predict(X_exit)
 
     # --- Display results ---
     print("📈 Sequence-based predictions (Entry / Exit):\n")
-    for ticker, entry, exit_ in zip(tickers, entry_preds, exit_preds):
+    for ticker, entry, exit_ in zip(tickers_entry, entry_preds, exit_preds):
         entry_signal = "✅ BUY" if entry > 0.5 else "❌ WAIT"
-        exit_signal = "🚪 EXIT" if exit > 0.5 else "🔒 HOLD"
+        exit_signal = "🚪 EXIT" if exit_ > 0.5 else "🔒 HOLD"
         print(f"{ticker}:  Entry → {entry_signal} ({entry[0]:.2f})   Exit → {exit_signal} ({exit_[0]:.2f})")
-
 
 if __name__ == "__main__":
     run_sequence_prediction()

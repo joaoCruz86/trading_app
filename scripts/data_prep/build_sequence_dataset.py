@@ -1,6 +1,5 @@
 """
 Build Sequence Dataset for AI Trading Models
-============================================
 
 This script prepares the time-series (sequence) dataset for Layer 2 of the trading system.
 
@@ -11,22 +10,10 @@ It pulls labeled tabular data from MongoDB:
 Each sample is a rolling window of N days of stock features (e.g., technical indicators).
 The label is the entry or exit signal N days into the future, used to train LSTM/GRU/Transformer models.
 
-Key Features:
--------------
-- Uses a fixed WINDOW_LEN for sequence length
-- Uses a forward HORIZON to define the prediction offset
-- Auto-handles multiple tickers and merges them into single input arrays
-- Saves compressed `.npz` file with:
-    - X_entry, y_entry       → entry signal sequences
-    - X_exit, y_exit         → exit signal sequences
-    - tickers_entry, tickers_exit
-
 Output:
--------
 - data/sequence_dataset.npz
 
 Usage:
-------
 $ PYTHONPATH="." python scripts/data_prep/build_sequence_dataset.py
 """
 
@@ -36,9 +23,9 @@ import pandas as pd
 from core.db import db
 
 # --- Config ---
-WINDOW_LEN = 60    # number of past days used as input
+WINDOW_LEN = 40    # number of past days used as input
 HORIZON = 5        # prediction horizon (used only for label positioning)
-FEATURE_COLS = None
+FEATURE_COLS = None  # Set to a list of feature names to use a subset
 OUTPUT_PATH = "data/sequence_dataset.npz"
 
 def build_sequences(df: pd.DataFrame, ticker_col="ticker", date_col="date", target_col="target"):
@@ -52,12 +39,20 @@ def build_sequences(df: pd.DataFrame, ticker_col="ticker", date_col="date", targ
     for ticker in tickers:
         df_t = df[df[ticker_col] == ticker].copy()
 
-        # Select features
+        # Select only numeric features (exclude ticker, date, and target columns)
         features = df_t.drop(columns=[ticker_col, date_col, target_col], errors="ignore")
+        features = features.select_dtypes(include=[np.number])
         if FEATURE_COLS:
-            features = features[FEATURE_COLS]
+            features = features[[col for col in FEATURE_COLS if col in features.columns]]
 
-        values = features.to_numpy()
+        # --- DEBUG: Print feature columns and sample values ---
+        print(f"\nTicker: {ticker}")
+        print("Feature columns:", features.columns.tolist())
+        print("Sample feature row:", features.head(1).to_dict())
+
+        values = features.to_numpy(dtype=np.float32)
+        print("values dtype:", values.dtype, "shape:", values.shape)
+
         targets = df_t[target_col].to_numpy()
 
         for i in range(len(df_t) - WINDOW_LEN - HORIZON):
@@ -68,7 +63,7 @@ def build_sequences(df: pd.DataFrame, ticker_col="ticker", date_col="date", targ
             y.append(targets[label_index])
             tickers_out.append(ticker)
 
-    return np.array(X), np.array(y), np.array(tickers_out)
+    return np.array(X, dtype=np.float32), np.array(y), np.array(tickers_out)
 
 def main():
     print("⚡ Building sequence dataset...")

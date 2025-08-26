@@ -10,7 +10,7 @@ This test ensures:
 
 import unittest
 import pandas as pd
-from scripts.data_prep.build_training_dataset import build_dataset
+from archived_tabular.build_training_dataset import build_dataset
 # from core.db import _client  # Don't close it here!
 
 class TestDataPrep(unittest.TestCase):
