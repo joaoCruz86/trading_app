@@ -43,21 +43,19 @@ def fetch_price_data(ticker, period=None, interval="1d", start_date=None, end_da
 
 # --- Indicator Calculations ---
 
-def compute_technical_indicators(df):
+def compute_technical_indicators(df, use_candle_features=True, volume_filter=True):
     """
-    Compute technical indicators on price data.
+    Compute technical indicators on price data, including candlestick features.
     """
     df = df.copy()
-
     print(f"⚙️ Computing indicators, rows={len(df)}, cols={list(df.columns)}")
 
-    # RSI
+    # --- Standard Indicators ---
     try:
         df["RSI"] = ta.rsi(df["Close"], length=14)
     except Exception as e:
         print("❌ RSI failed:", e)
 
-    # MACD
     try:
         macd = ta.macd(df["Close"])
         df["MACD"] = macd["MACD_12_26_9"]
@@ -65,36 +63,52 @@ def compute_technical_indicators(df):
     except Exception as e:
         print("❌ MACD failed:", e)
 
-    # EMA
     try:
         df["EMA_20"] = ta.ema(df["Close"], length=20)
         df["EMA_50"] = ta.ema(df["Close"], length=50)
     except Exception as e:
         print("❌ EMA failed:", e)
 
-    # SMA
     try:
         df["SMA_20"] = ta.sma(df["Close"], length=20)
         df["SMA_200"] = ta.sma(df["Close"], length=200)
     except Exception as e:
         print("❌ SMA failed:", e)
 
-    # Bollinger Bands
     try:
         bbands = ta.bbands(df["Close"])
         upper_col = next((col for col in bbands.columns if col.startswith("BBU")), None)
         lower_col = next((col for col in bbands.columns if col.startswith("BBL")), None)
-
         if upper_col and lower_col:
             df["BB_upper"] = bbands[upper_col]
             df["BB_lower"] = bbands[lower_col]
-        else:
-            raise ValueError("Missing Bollinger Band columns")
     except Exception as e:
         print("❌ Bollinger Bands failed:", e)
 
+    # --- Candlestick Features ---
+    if use_candle_features:
+        try:
+            df["body_size"] = (df["Close"] - df["Open"]).abs()
+            df["upper_wick"] = df["High"] - df[["Open", "Close"]].max(axis=1)
+            df["lower_wick"] = df[["Open", "Close"]].min(axis=1) - df["Low"]
+            df["is_bullish"] = (df["Close"] > df["Open"]).astype(int)
+
+            # Normalize wick and body ratios
+            df["body_to_range"] = df["body_size"] / (df["High"] - df["Low"] + 1e-6)
+            df["wick_to_body"] = (df["upper_wick"] + df["lower_wick"]) / (df["body_size"] + 1e-6)
+
+            # Optional: filter for meaningful candles only (body must be a decent part of range)
+            if volume_filter:
+                rolling_volume = df["Volume"].rolling(5).mean()
+                df["high_volume"] = (df["Volume"] > rolling_volume).astype(int)
+                df = df[df["high_volume"] == 1]
+                df = df[df["body_to_range"] > 0.2]  # remove doji/noise
+        except Exception as e:
+            print("❌ Candlestick features failed:", e)
+
     print(f"✅ Done indicators, now cols={list(df.columns)}")
     return df
+
 
 
 

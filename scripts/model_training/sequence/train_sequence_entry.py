@@ -1,103 +1,44 @@
-# scripts/data_prep/build_sequence_dataset.py
+# scripts/model_training/train_sequence_entry.py
 """
-Build Sequence Dataset for Time-Aware Models
---------------------------------------------
-This script transforms your tabular daily data into rolling windows
-so that GRU/LSTM/Transformers can learn temporal patterns.
-
-Each sample = last N days of features for a stock.
-Label = forward return (e.g. price change over next horizon days).
-
-Output:
-- .npz file (for fast local access)
-- MongoDB insertion (for production pipeline)
+Train GRU Entry Model on Sequential Data
+----------------------------------------
+This script trains a GRU model on the pre-built sequence dataset
+for entry signal prediction (i.e., buy signal).
 """
 
-import os
 import numpy as np
-import pandas as pd
-from core.db import db
-
-# --- Config ---
-WINDOW_LEN = 60   # number of past days used as input
-HORIZON = 5       # predict next 5 days return
-FEATURE_COLS = None  # if None, will auto-select numeric features
-OUTPUT_PATH = "data/sequence_dataset.npz"
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
+from scripts.model_training.sequence.sequence_model_utils import (
+    build_gru_model, get_early_stopping, DEFAULT_WINDOW_LEN, DEFAULT_N_FEATURES
+)
 
 
-def build_sequences(df: pd.DataFrame, ticker_col="ticker", date_col="date", target_col="target"):
-    """
-    Convert daily tabular data into rolling windows for sequence models.
-    """
-    X, y = [], []
+# --- Load Data ---
+data = np.load("data/sequence_dataset.npz")
+X = data["X_entry"]
+y = data["y_entry"]
 
-    # ensure sorting
-    df[date_col] = pd.to_datetime(df[date_col])
-    df = df.sort_values([ticker_col, date_col])
+print(f"📊 Loaded Entry Dataset: X={X.shape}, y={y.shape}")
 
-    tickers = df[ticker_col].unique()
+# --- Split Data ---
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-    for ticker in tickers:
-        df_t = df[df[ticker_col] == ticker].copy()
+# --- Build Model ---
+input_shape = (DEFAULT_WINDOW_LEN, DEFAULT_N_FEATURES)
+model = build_gru_model(input_shape=input_shape)
+model.summary()
 
-        # auto-select features if not set
-        features = df_t.drop(columns=[ticker_col, date_col, target_col], errors="ignore")
-        if FEATURE_COLS:
-            features = features[FEATURE_COLS]
+# --- Train Model ---
+history = model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=50,
+    batch_size=32,
+    callbacks=[get_early_stopping()],
+    verbose=1
+)
 
-        values = features.to_numpy()
-        targets = df_t[target_col].to_numpy()
-
-        for i in range(len(df_t) - WINDOW_LEN - HORIZON):
-            X.append(values[i:i+WINDOW_LEN])   # last N days
-            # label: did the stock go up after horizon days?
-            future_return = targets[i+WINDOW_LEN+HORIZON-1]
-            y.append(future_return)
-
-    return np.array(X), np.array(y)
-
-
-def save_to_mongodb(X: np.ndarray, y: np.ndarray, collection_name: str):
-    """Save sequence dataset to MongoDB."""
-    print(f"📥 Inserting {len(X)} sequences into MongoDB → {collection_name}")
-    collection = db[collection_name]
-    collection.delete_many({})  # optional: clean existing
-    docs = [{"sequence": x.tolist(), "label": int(label)} for x, label in zip(X, y)]
-    collection.insert_many(docs)
-    print("✅ Saved to MongoDB")
-
-
-def main():
-    print("⚡ Building sequence dataset...")
-
-    # Load from DB
-    df = pd.DataFrame(list(db["training"].find()))
-    if "_id" in df.columns:
-        df.drop(columns=["_id"], inplace=True)
-
-    # Ensure target is binary
-    assert set(df["target"].unique()).issubset({0, 1}), "Target must be binary!"
-
-    # Build sequences
-    X, y = build_sequences(df)
-
-    # Split for entry & exit models (same for now)
-    X_entry, y_entry = X, y
-    X_exit, y_exit = X, y
-
-    # Save locally as .npz
-    os.makedirs("data", exist_ok=True)
-    np.savez_compressed(OUTPUT_PATH, 
-                        X_entry=X_entry, y_entry=y_entry,
-                        X_exit=X_exit, y_exit=y_exit)
-    print(f"💾 Sequence dataset saved to {OUTPUT_PATH}")
-
-    # Save to MongoDB
-    save_to_mongodb(X_entry, y_entry, "sequence_entry")
-    save_to_mongodb(X_exit, y_exit, "sequence_exit")
-
-    print(f"🧠 Shapes → X: {X.shape}, y: {y.shape}")
-
-
-if __name__ == "__main__":
-    main()
+# --- Save Model ---
+model.save("models/entry_sequence_gru.h5")
+print("✅ Entry GRU model saved to models/entry_sequence_gru.h5")

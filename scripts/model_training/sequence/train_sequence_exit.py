@@ -9,17 +9,15 @@ Saves model to: models/sequence/exit_gru.h5
 import os
 import numpy as np
 from core.db import db
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import GRU, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+from scripts.model_training.sequence_model_utils import build_gru_model, DEFAULT_WINDOW_LEN
+from tensorflow.keras.callbacks import EarlyStopping
 
 # --- Config ---
 MODEL_PATH = "models/sequence/exit_gru.h5"
-WINDOW_LEN = 60
-N_FEATURES = 16
-EPOCHS = 20
+WINDOW_LEN = DEFAULT_WINDOW_LEN
+EPOCHS = 50
 BATCH_SIZE = 32
-LR = 0.001
+PATIENCE = 5  # EarlyStopping patience
 
 
 def load_exit_sequence_data():
@@ -30,27 +28,32 @@ def load_exit_sequence_data():
     return X, y
 
 
-def build_model(input_shape, hidden_units=64, dropout=0.2, lr=LR):
-    """Build and compile a GRU model."""
-    model = Sequential()
-    model.add(GRU(hidden_units, input_shape=input_shape, return_sequences=False))
-    model.add(Dropout(dropout))
-    model.add(Dense(1, activation="sigmoid"))
-    model.compile(optimizer=Adam(learning_rate=lr),
-                  loss="binary_crossentropy",
-                  metrics=["accuracy"])
-    return model
-
-
 def train_exit_sequence_model():
     """Train and save the GRU-based exit signal model."""
     print("⚙️ Loading exit sequence data...")
     X, y = load_exit_sequence_data()
-    print(f"✅ Loaded: {X.shape[0]} samples")
+    print(f"✅ Loaded: {X.shape[0]} samples | Shape: {X.shape}")
+
+    n_features = X.shape[2]
+    input_shape = (WINDOW_LEN, n_features)
 
     print("🚀 Training GRU model for exit signals...")
-    model = build_model((WINDOW_LEN, N_FEATURES))
-    model.fit(X, y, epochs=EPOCHS, batch_size=BATCH_SIZE, validation_split=0.2, verbose=1)
+    model = build_gru_model(input_shape=input_shape)
+
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=PATIENCE,
+        restore_best_weights=True
+    )
+
+    model.fit(
+        X, y,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        validation_split=0.2,
+        callbacks=[early_stopping],
+        verbose=1
+    )
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     model.save(MODEL_PATH)
