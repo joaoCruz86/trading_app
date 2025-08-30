@@ -9,7 +9,6 @@ from core.macro_filter import is_macro_environment_favorable, get_macro_for_coun
 
 db_training = db["training"]
 db_training.drop()  # ⚠️ Clears existing data (safe if it's regenerated fresh)
-db_training.insert_many(records)
 
 
 

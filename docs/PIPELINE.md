@@ -48,7 +48,7 @@ TOO SMALL ❌ (fails liquidity filter)
 
 
 
-### 🧩 Layer 1: Tabular AI Models
+### 🧩 Layer 1: Tabular AI Models - ARCHIVED!!!
 
 * **Input:** Raw historical price data + technical indicators + fundamentals + macro filters.
 * **Target:** Binary classification (buy signal if +5% return in 20 days).

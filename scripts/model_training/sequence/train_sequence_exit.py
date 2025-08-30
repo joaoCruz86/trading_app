@@ -9,7 +9,7 @@ Saves model to: models/sequence/exit_gru.h5
 import os
 import numpy as np
 from core.db import db
-from scripts.model_training.sequence_model_utils import build_gru_model, DEFAULT_WINDOW_LEN
+from scripts.model_training.sequence.sequence_model_utils import build_gru_model, DEFAULT_WINDOW_LEN
 from tensorflow.keras.callbacks import EarlyStopping
 
 # --- Config ---

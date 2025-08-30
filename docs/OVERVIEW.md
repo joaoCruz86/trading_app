@@ -6,7 +6,7 @@ This project is a two-layer AI-powered stock trading assistant. It uses fundamen
 
 ## 🧠 System Architecture
 
-**Layer 1: Tabular Screening (Random Forest + LightGBM)**  
+**Layer 1: Tabular Screening (Random Forest + LightGBM)**  - ARCHIVED!!!
 - Consumes structured features from price, fundamentals, and macroeconomic indicators.
 - Predicts potential "buy" signals using two parallel models:  
   - Random Forest  

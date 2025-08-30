@@ -9,7 +9,7 @@ This test ensures:
 
 import unittest
 import pandas as pd
-from scripts.data_prep.build_exit_training_dataset import build_exit_dataset
+from archived_tabular.build_exit_training_dataset import build_exit_dataset
 
 
 class TestExitDataset(unittest.TestCase):
